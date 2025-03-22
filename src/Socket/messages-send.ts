@@ -369,7 +369,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 		const isGroup = server === 'g.us'
 		const isStatus = jid === statusJid
 		const isLid = server === 'lid'
-        const isPrivate = server === 's.whatsapp.net'
+        const isPerson = server === 's.whatsapp.net'
 		const isNewsletter = server === 'newsletter'
 
 		msgId = msgId || generateMessageID()
@@ -598,9 +598,9 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				if(additionalNodes && additionalNodes.length > 0) {
                       (stanza.content as BinaryNode[]).push(...additionalNodes);
                 }
-                const inMsg = normalizeMessageContent(message) || null
-                const key = inMsg ? getContentType(inMsg) : null
-                if(!isNewsletter && (key === 'interactiveMessage' || key === 'buttonsMessage')) {
+                const Msg = normalizeMessageContent(message)!
+                const key = getContentType(Msg)!
+                if(!isNewsletter && ((key === 'interactiveMessage' && Msg?.interactiveMessage?.nativeFlowMessage) || key === 'buttonsMessage')) {
                     const nativeNode = {
 						  tag: 'biz',
 						  attrs: {},
@@ -613,8 +613,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							  content: [{
 			   					  tag: 'native_flow',
 			   					  attrs: { 
-			   					     name: 'quick_reply'
-			   					  }
+			   					     name: 'quick_reply',
+			   				      },
 							  }]
     					  }]
 				    }
@@ -625,8 +625,23 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				        (stanza.content as BinaryNode[]).push(nativeNode);
 				    }
 				}
+				 				
+				if(message.listMessage) {
+					(stanza.content as BinaryNode[]).push({
+						tag: 'biz',
+						attrs: { },
+						content: [
+							{
+								tag: 'list',
+								attrs: getButtonArgs(message),
+							}
+						]
+					});
+
+					logger.debug({ jid }, 'adding business node')
+				}
   
-				if(isPrivate) {
+				if(isPerson) {
 				    const botNode = { 
 				          tag: 'bot', 
 				          attrs: { biz_bot: '1' }
@@ -637,21 +652,6 @@ export const makeMessagesSocket = (config: SocketConfig) => {
                     } else {
                       (stanza.content as BinaryNode[]).push(botNode)
                     }
-				}
-				 				
-				if(message && message.listMessage) {
-					(stanza.content as BinaryNode[]).push({
-						tag: 'biz',
-						attrs: { },
-						content: [
-							{
-								tag: 'list',
-								attrs: getButtonArgs(message)
-							}
-						]
-					});
-
-					logger.debug({ jid }, 'adding business node')
 				}
 
 				logger.debug({ msgId }, `sending message to ${participants.length} devices`)
@@ -679,12 +679,12 @@ export const makeMessagesSocket = (config: SocketConfig) => {
     
     const filterBotNode = (nodeContent) => {
         if(Array.isArray(nodeContent)) {
-            return nodeContent!.filter((item) => {
-                if(item!.tag === 'bot' && item!.attrs!.biz_bot === '1') {
-                     return false;
-                } 
+            return nodeContent.filter((item) => {
+                if(item?.tag === 'bot' && item?.attrs?.biz_bot === '1') {
+                    return false;
+                }
                 return true;
-            })
+            });
         } else {
             return nodeContent;
         }
@@ -874,13 +874,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
            for(const id of jids) {
 		      const { user, server } = jidDecode(id)!
 		      const isGroup = server === 'g.us'
-              const isPrivate = server === 's.whatsapp.net'
+              const isPerson = server === 's.whatsapp.net'
               if(isGroup) {
                  let userId = await groupMetadata(id)
                  let participant = await userId.participants
                  let users = await Promise.all(participant.map(u => jidNormalizedUser(u.id))); 
                  allUsers = [...allUsers as string[], ...users as string[]];
-              } else if(isPrivate) {
+              } else if(isPerson) {
                  let users = await Promise.all(jids.map(id => id.replace(/\b\d{18}@.{4}\b/g, '')));
                  allUsers = [...allUsers as string[], ...users as string[]];
               }
@@ -951,8 +951,8 @@ export const makeMessagesSocket = (config: SocketConfig) => {
            jids.forEach(async id => {
                id = jidNormalizedUser(id)!
 		       const { user, server } = jidDecode(id)!
-               const isPrivate = server === 's.whatsapp.net'
-               let type = isPrivate
+               const isPerson = server === 's.whatsapp.net'
+               let type = isPerson
                    ? 'statusMentionMessage' 
                    : 'groupStatusMentionMessage'
                await relayMessage(
@@ -1103,7 +1103,7 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 					{
 						logger,
 						userJid,
-						ephemeralExpiration: (options.ephemeralExpiration && options.ephemeralExpiration > 0) ? options.ephemeralExpiration : eph,
+						ephemeralExpiration: (options.ephemeralExpiration && options.ephemeralExpiration >= 0) ? options.ephemeralExpiration : eph,
 						getUrlInfo: text => getUrlInfo(
 							text,
 							{

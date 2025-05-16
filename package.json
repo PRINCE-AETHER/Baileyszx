@@ -12,12 +12,12 @@
     "automation",
     "multi-device"
   ],
-  "homepage": "https://github.com/WhiskeySockets/Baileys",
+  "homepage": "https://github.com/PRINCE-AETHER/Baileyszx",
   "repository": {
-    "url": "git@github.com:WhiskeySockets/Baileys.git"
+    "url": "git@github.com:PRINCE-AETHER/Baileyszx.git"
   },
   "license": "MIT",
-  "author": "Adhiraj Singh",
+  "author": "AETHERZCODE",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "files": [
